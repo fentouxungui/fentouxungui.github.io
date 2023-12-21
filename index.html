@@ -113,9 +113,19 @@
   <nav class="site-state">
       <div class="site-state-item site-state-posts">
         <a href="/archives/">
-          <span class="site-state-item-count">1</span>
+          <span class="site-state-item-count">10</span>
           <span class="site-state-item-name">日志</span>
         </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">3</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">10</span>
+        <span class="site-state-item-name">标签</span></a>
       </div>
   </nav>
 </div>
@@ -140,7 +150,7 @@
   
 
   <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="">
-    <link itemprop="mainEntityOfPage" href="https://fentouxungui.github.io/2023/12/21/hello-world/">
+    <link itemprop="mainEntityOfPage" href="https://fentouxungui.github.io/2022/07/01/RNA-seq-negative-binomial-distribution/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
       <meta itemprop="image" content="/images/avatar.gif">
@@ -158,7 +168,7 @@
     </span>
       <header class="post-header">
         <h2 class="post-title" itemprop="name headline">
-          <a href="/2023/12/21/hello-world/" class="post-title-link" itemprop="url">Hello World</a>
+          <a href="/2022/07/01/RNA-seq-negative-binomial-distribution/" class="post-title-link" itemprop="url">未命名</a>
         </h2>
 
         <div class="post-meta-container">
@@ -169,7 +179,191 @@
       </span>
       <span class="post-meta-item-text">发表于</span>
 
-      <time title="创建时间：2023-12-21 13:16:58" itemprop="dateCreated datePublished" datetime="2023-12-21T13:16:58+08:00">2023-12-21</time>
+      <time title="创建时间：2022-07-01 12:59:27" itemprop="dateCreated datePublished" datetime="2022-07-01T12:59:27+08:00">2022-07-01</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">更新于</span>
+      <time title="修改时间：2020-09-03 16:26:38" itemprop="dateModified" datetime="2020-09-03T16:26:38+08:00">2020-09-03</time>
+    </span>
+
+  
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+          <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=default"></script>
+
+<blockquote>
+<p><a target="_blank" rel="noopener" href="https://www.jianshu.com/p/ad24bb90b972">RNA-seq中的那些统计学问题（一）为什么是负二项分布？</a></p>
+</blockquote>
+<blockquote>
+<p><a target="_blank" rel="noopener" href="https://bioramble.wordpress.com/2016/01/30/why-sequencing-data-is-modeled-as-negative-binomial/">WHY SEQUENCING DATA IS MODELED AS NEGATIVE BINOMIAL</a></p>
+</blockquote>
+<blockquote>
+<p><a target="_blank" rel="noopener" href="https://mp.weixin.qq.com/s/UTmSzCgDIFYbG2WByzaqQQ">RNA-seq分析中的dispersion，你知道吗？</a></p>
+</blockquote>
+<blockquote>
+<p><a target="_blank" rel="noopener" href="https://www.jianshu.com/p/bf3fdd21153e">DESeq2的建模原理及简单用法</a></p>
+</blockquote>
+<h1 id="1-转录组数据统计推断的难题"><a href="#1-转录组数据统计推断的难题" class="headerlink" title="1. 转录组数据统计推断的难题"></a>1. 转录组数据统计推断的难题</h1><p>在RNA-seq中进行两组间的差异分析是最正常不过的了。</p>
+<p>我们在其它实验中同样会遇到类似的分析，通常，我们可以用方差分析判定两组“分布”数据间是否存在显著差异。原理是：当组间方差大于组内方差（误差效应），并且统计学显著时，则认为组间处理是可以引起差异的。</p>
+<p>有伙伴肯定要问，转录组数据到底有什么了不起的？它们为什么不能用我们熟悉的算法简单地进行计算？</p>
+<p>其实统计学家也很无奈啊，看看我们转录组实验得到的这些数据吧：我们的实验只进行少得可怜的生物学重复（n&lt;10），而且，任何基因的表达量都不能是负数，这些数据并不符合正态分布，用于表征表达量的counts是非连续的（芯片信号是连续的），RNA-seq数据的离散通常是高度扭曲的，方差往往会大于均值……，就这些奇怪的特征，使得准确估计方差并没有想象的那么容易。</p>
+<p>我们面临两个核心问题：</p>
+<ul>
+<li><p>基因表达数据适合用什么统计学分布进行差异显著性检验？</p>
+</li>
+<li><p>如何利用少量生物学重复数据估算基因表达的标准差？</p>
+</li>
+</ul>
+<h1 id="2-泊松分布-or-负二项分布？"><a href="#2-泊松分布-or-负二项分布？" class="headerlink" title="2. 泊松分布 or 负二项分布？"></a>2. 泊松分布 or 负二项分布？</h1><p>从统计学的角度出发，进行差异分析肯定会需要假设检验，通常对于分布已知的数据，运用参数检验结果的假阳性率会更低。转录组数据中，<strong>raw count值符合什么样的分布呢？</strong></p>
+<p>count值本质是reads的数目，是一个非零整数，而且是离散的，其分布肯定也是<strong>离散型分布</strong>。对于转录组数据，学术界常用的分布包括泊松分布 (poisson)和负二项分布 (negative binomial)两种。</p>
+<h2 id="2-1-为什么泊松分布不行？"><a href="#2-1-为什么泊松分布不行？" class="headerlink" title="2.1. 为什么泊松分布不行？"></a>2.1. 为什么泊松分布不行？</h2><p>首先有必要简单地介绍一下泊松分布</p>
+<blockquote>
+<p>泊松分布适合于描述单位时间（或空间）内随机事件发生的次数（事件发生的次数只能是离散的整数）。如某一服务设施在一定时间内到达的人数，电话交换机接到呼叫的次数，汽车站台的候客人数，机器出现的故障数，自然灾害发生的次数，一块产品上的缺陷数，显微镜下单位分区内的细菌分布数等等。</p>
+<p>$$P(X&#x3D;k)&#x3D;\frac{\lambda^k }{k!}e^{-\lambda},\quad k&#x3D;0,1,…$$</p>
+<p>泊松分布大概长这样：</p>
+<div align="center">![avatar](https://upload-images.jianshu.io/upload_images/15455040-a22a1135a6210c4b.png?imageMogr2/auto-orient/strip|imageView2/2/w/565/format/webp)</div>
+
+<p>λ是波松分布所依赖的唯一参数。 λ值愈小分布愈偏倚，随着λ的增大，分布趋于对称。 当λ&#x3D;20时分布接近于正态分布；当λ&#x3D;50时， 可以认为波松分布呈正态分布。</p>
+</blockquote>
+<p>在数据分析的早期，确实有学者采用泊松分布进行差异分析，但是发展到现在，几乎全部都是基于负二项分布了，究竟是什么因素导致了这种现象呢？为了解释这个问题，我们必须提到一个概念 overdispersion。</p>
+<p>dispersion指的是离散程度，研究一个数据分布的离散程度，我们常用方差这个指标。<strong>对于泊松分布而言，其均值和方差是相等的</strong>，但是我们的数据确不符合这样的规律。通过计算所有基因的均值和方差，可以绘制如下的图片：<div align="center"><img src="https://upload-images.jianshu.io/upload_images/15455040-0b8acdcca1b63243.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/650/format/webp" alt="avatar2"></div></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">mean &lt;- log10(apply(x, 1, mean))</span><br><span class="line">var &lt;- log10(apply(x, 1, var))</span><br><span class="line">plot(x = mean, y = var, pch = 20)</span><br><span class="line">abline(a = 0, b=1)</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line">library(DESeq2)</span><br><span class="line">library(matrixStats)</span><br><span class="line">library(magrittr)</span><br><span class="line">library(ggplot2)</span><br><span class="line"></span><br><span class="line">dds &lt;- readRDS(&quot;ddsMat.rds&quot;)</span><br><span class="line"></span><br><span class="line">mvDat &lt;- data.frame(</span><br><span class="line">  Mean = log10(unname(rowMeans(counts(dds,normalized = TRUE)))),</span><br><span class="line">  Variance = log10(rowVars(counts(dds,normalized = TRUE)))</span><br><span class="line">)</span><br><span class="line"></span><br><span class="line">ssDat &lt;- smooth.spline(x = mvDat$Mean, y = mvDat$Variance, spar = 1) %$%</span><br><span class="line">  data.frame(x = x, y = y)</span><br><span class="line"></span><br><span class="line">ggplot(mvDat, aes(x = Mean, y = Variance)) +</span><br><span class="line">  geom_point(size = 0.5, alpha = 0.6, colour = &quot;darkblue&quot;) +</span><br><span class="line">  geom_line(data = ssDat, aes(x = x, y = y), colour = &quot;red&quot;, size = 0.5) +</span><br><span class="line">  theme_bw() +</span><br><span class="line">  xlim(0,10) +</span><br><span class="line">  ylim(0,10) +</span><br><span class="line">  theme(plot.title = element_text(hjust = 0.5))</span><br></pre></td></tr></table></figure>
+
+<p>横坐标为基因在所有样本中的均值，纵坐标为基因在所有样本中的方差，直线的斜率为1，代表泊松分布的均值和方差的分布。可以看到，真实数据的分布是偏离了泊松分布的，方差明显比均值要大。</p>
+<p>如果假定总体分布为泊松分布， 根据我们的定量数据是无法估计出一个合理的参数，能够符合上图中所示分布的，这样的现象就称之为overdispersion。</p>
+<p>由于真实数据与泊松分布之间的overdispersion，选择泊松分布分布作为总体的分布是不合理。</p>
+<p>以上只证明了泊松分布是个不太恰当的分布估计，那怎么证明负二项分布就是合适的分布估计呢？</p>
+<h2 id="2-2-为什么负二项分布行？"><a href="#2-2-为什么负二项分布行？" class="headerlink" title="2.2. 为什么负二项分布行？"></a>2.2. 为什么负二项分布行？</h2><p>主要是从均值与方差之间的关系去证明</p>
+<p>同样的，也先简单介绍一下负二项分布：</p>
+<blockquote>
+<p>伯努利试验（Bernoulli experiment）是在同样的条件下重复地、相互独立地进行的一种随机试验，其特点是该随机试验只有两种可能结果：发生或者不发生。 我们假设该项试验独立重复地进行了n次，那么就称这一系列重复独立的随机试验为n重伯努利试验，或称为伯努利概型。</p>
+<p>二项分布描述的是n重伯努利实验，在n重贝努利试验中，事件A恰好发生x(0≤x≤n)次的概率为：</p>
+<p>$$P_n(x)&#x3D;C_n^x p^x(1-p)^{n-x}$$</p>
+<p>它的概率分布图如下：</p>
+<div align="center">![avatar](https://upload-images.jianshu.io/upload_images/15455040-dca31277fae85216.jpg?imageMogr2/auto-orient/strip|imageView2/2/w/532/format/webp)</div>
+
+<p>负二项分布描述的也是<strong>伯努利实验</strong>，不过它的目标事件变成了：对于Bernoulli过程，我们设定，当某个结果出现固定次数的时候，整个过程的数量，比如我们生产某个零件，假设每个零件的合格与否都是相互独立的，且分布相同，那么当我们生产出了五个不合格零件时，一共生产了多少合格的零件，这个数量就是一个负二项分布，公式如下：</p>
+<blockquote>
+<p>$$f(k;r;p)&#x3D;P(x&#x3D;k)&#x3D;C_{r+k-1}^k p^k(1-p)^r$$</p>
+</blockquote>
+<p>该公式描述的是，在合格率为p的一堆产品中，进行连续有放回的抽样，当抽到r个次品时，停止抽样，此时抽到的正品正好为k个的概率</p>
+<p>它的概率分布如下：</p>
+<div align="center">![avatar](https://upload-images.jianshu.io/upload_images/15455040-4088dc93a55c97da.png?imageMogr2/auto-orient/strip|imageView2/2/w/260/format/webp)</div>
+<div align="center">p=0.5, r=5</div>
+
+</blockquote>
+<p>负二项分布的均值和方差分别为(<font color=#FF0000> 如何推导出来的？</font>)：</p>
+<p>$$\mu&#x3D;\frac{pr}{1-p}$$</p>
+<p>$$\sigma^2&#x3D;\frac{pr}{(1-p)^2}$$</p>
+<p>将p用μ表示，得到：</p>
+<p>$$p&#x3D;\frac{\mu}{\mu+r},\quad 1-p&#x3D;\frac{r}{\mu+r}$$</p>
+<p>将上一步推出的p和1-p带入到方差的表达式中，得到：</p>
+<p>$$\sigma^2&#x3D;\frac{\mu^2}{r}+\mu$$</p>
+<p>记1&#x2F;r&#x3D;α，则</p>
+<p>$$\sigma^2&#x3D;\mu+\alpha\mu^2$$</p>
+<p>从上面的式子可以看出，均值是方差的二次函数，方差随着均值的增加而进行二次函数形式的递增，正好符合上文 <code>2.1. 为什么泊松分布不行？ 部分均值与方差分布图的情况</code></p>
+<p>其中<code>α</code>和<code>r</code>被称为dispersion parameter</p>
+<p>负二项分布与泊松分布的关系，可以用<code>α</code>或<code>r</code>推出：</p>
+<blockquote>
+<p>当 r -&gt; ∞ 时，α -&gt; 0，此时 σ2&#x3D; μ，为泊松分布；</p>
+</blockquote>
+<blockquote>
+<p>当 r -&gt; 0 时，α -&gt; ∞，此时overdispersion</p>
+</blockquote>
+<h2 id="3-方差估计"><a href="#3-方差估计" class="headerlink" title="3. 方差估计"></a>3. 方差估计</h2><p>在生物学重复很少时，我们是很难准确计算每个基因表达的标准差的（相当于这个数据集的离散程度）。我们很可能会低估数据的离散程度。</p>
+<p>被逼无奈的科学家提出了一个假设：<strong>表达丰度相似的基因，在总体上标准差应该也是相似的</strong>。我们把不同生物学重复中表达丰度相同的基因的总标准差取个平均值，低于这个值的都用这个值，高于这个值的就用算出来的值。<div align="center"><img src="https://upload-images.jianshu.io/upload_images/15455040-214b68916f1ac575.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/946/format/webp" alt="avatar"></div></p>
+<div align="center">![avatar](https://upload-images.jianshu.io/upload_images/15455040-7249241acedb1533.png?imageMogr2/auto-orient/strip|imageView2/2/w/952/format/webp)</div>
+
+
+
+
+
+
+
+
+      
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+        <div class="post-eof"></div>
+      
+    </footer>
+  </article>
+</div>
+
+
+
+
+    
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="">
+    <link itemprop="mainEntityOfPage" href="https://fentouxungui.github.io/2022/07/01/hello-world/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="Yongchao Zhang">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="FenTouXunGui">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="undefined | FenTouXunGui">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          <a href="/2022/07/01/hello-world/" class="post-title-link" itemprop="url">Hello World</a>
+        </h2>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2022-07-01 12:59:27" itemprop="dateCreated datePublished" datetime="2022-07-01T12:59:27+08:00">2022-07-01</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">更新于</span>
+      <time title="修改时间：2020-01-10 09:39:19" itemprop="dateModified" datetime="2020-01-10T09:39:19+08:00">2020-01-10</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/%E6%B5%8B%E8%AF%95/" itemprop="url" rel="index"><span itemprop="name">测试</span></a>
+        </span>
     </span>
 
   
@@ -183,19 +377,858 @@
     
     <div class="post-body" itemprop="articleBody">
           <p>Welcome to <a target="_blank" rel="noopener" href="https://hexo.io/">Hexo</a>! This is your very first post. Check <a target="_blank" rel="noopener" href="https://hexo.io/docs/">documentation</a> for more info. If you get any problems when using Hexo, you can find the answer in <a target="_blank" rel="noopener" href="https://hexo.io/docs/troubleshooting.html">troubleshooting</a> or you can ask me on <a target="_blank" rel="noopener" href="https://github.com/hexojs/hexo/issues">GitHub</a>.</p>
-<h2 id="Quick-Start"><a href="#Quick-Start" class="headerlink" title="Quick Start"></a>Quick Start</h2><h3 id="Create-a-new-post"><a href="#Create-a-new-post" class="headerlink" title="Create a new post"></a>Create a new post</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo new <span class="string">&quot;My New Post&quot;</span></span><br></pre></td></tr></table></figure>
+          <!--noindex-->
+            <div class="post-button">
+              <a class="btn" href="/2022/07/01/hello-world/#more" rel="contents">
+                阅读全文 &raquo;
+              </a>
+            </div>
+          <!--/noindex-->
+        
+      
+    </div>
 
-<p>More info: <a target="_blank" rel="noopener" href="https://hexo.io/docs/writing.html">Writing</a></p>
-<h3 id="Run-server"><a href="#Run-server" class="headerlink" title="Run server"></a>Run server</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo server</span><br></pre></td></tr></table></figure>
+    
+    
+    
 
-<p>More info: <a target="_blank" rel="noopener" href="https://hexo.io/docs/server.html">Server</a></p>
-<h3 id="Generate-static-files"><a href="#Generate-static-files" class="headerlink" title="Generate static files"></a>Generate static files</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo generate</span><br></pre></td></tr></table></figure>
+    <footer class="post-footer">
+        <div class="post-eof"></div>
+      
+    </footer>
+  </article>
+</div>
 
-<p>More info: <a target="_blank" rel="noopener" href="https://hexo.io/docs/generating.html">Generating</a></p>
-<h3 id="Deploy-to-remote-sites"><a href="#Deploy-to-remote-sites" class="headerlink" title="Deploy to remote sites"></a>Deploy to remote sites</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">$ hexo deploy</span><br></pre></td></tr></table></figure>
 
-<p>More info: <a target="_blank" rel="noopener" href="https://hexo.io/docs/one-command-deployment.html">Deployment</a></p>
 
+
+    
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="">
+    <link itemprop="mainEntityOfPage" href="https://fentouxungui.github.io/2022/07/01/edger%E4%B8%8EDEseq%E5%8C%85%E5%88%86%E6%9E%90%E5%8E%9F%E7%90%86/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="Yongchao Zhang">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="FenTouXunGui">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="undefined | FenTouXunGui">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          <a href="/2022/07/01/edger%E4%B8%8EDEseq%E5%8C%85%E5%88%86%E6%9E%90%E5%8E%9F%E7%90%86/" class="post-title-link" itemprop="url">未命名</a>
+        </h2>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2022-07-01 12:59:27" itemprop="dateCreated datePublished" datetime="2022-07-01T12:59:27+08:00">2022-07-01</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">更新于</span>
+      <time title="修改时间：2020-09-07 10:32:42" itemprop="dateModified" datetime="2020-09-07T10:32:42+08:00">2020-09-07</time>
+    </span>
+
+  
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+          <blockquote>
+<p>tatQuest学习笔记25——差异表达分析(<a target="_blank" rel="noopener" href="http://www.360doc.com/content/18/0815/22/57890290_778579575.shtml">http://www.360doc.com/content/18/0815/22/57890290_778579575.shtml</a>)</p>
+</blockquote>
+<p>前言——主要内容</p>
+<p>这篇笔记是StatQuest系列视频教程的第59，60，61节。主要内容讲的是高通测序数据的差异基因分析，其中，第59节的内容是edgeR进行的文库均一化；第60节是DESeq2的文库均一化；第61节则是讲的是edgeR和DESeq2均一化的一些阈值选择。</p>
+<p>RPKM等均一化的局限<br>edgeR与DESeq2这两种方法并不使用RPKM，FPKM，TPM等方法来进行均一化，edgeR与DESeq2在对文库进行均一化时要考虑两个方面的问题：</p>
+<p>第一，测序深度（RPKM，FPKM，TPM方法也能做到）；</p>
+<p>第二， 文库补偿（library composition没有找到相应的中文译名，此处译为“文库补偿”），因为不同的样本含有不同的活跃基因（FPKM，FPKM和TPM做不到），如下所示：</p>
+
+      
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+        <div class="post-eof"></div>
+      
+    </footer>
+  </article>
+</div>
+
+
+
+
+    
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="">
+    <link itemprop="mainEntityOfPage" href="https://fentouxungui.github.io/2022/07/01/DESeq2%E7%9A%84%E5%BB%BA%E6%A8%A1%E5%8E%9F%E7%90%86%E5%8F%8A%E7%AE%80%E5%8D%95%E7%94%A8%E6%B3%95/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="Yongchao Zhang">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="FenTouXunGui">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="undefined | FenTouXunGui">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          <a href="/2022/07/01/DESeq2%E7%9A%84%E5%BB%BA%E6%A8%A1%E5%8E%9F%E7%90%86%E5%8F%8A%E7%AE%80%E5%8D%95%E7%94%A8%E6%B3%95/" class="post-title-link" itemprop="url">未命名</a>
+        </h2>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2022-07-01 12:59:27" itemprop="dateCreated datePublished" datetime="2022-07-01T12:59:27+08:00">2022-07-01</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">更新于</span>
+      <time title="修改时间：2020-09-04 13:59:29" itemprop="dateModified" datetime="2020-09-04T13:59:29+08:00">2020-09-04</time>
+    </span>
+
+  
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+          <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=default"></script>
+
+<blockquote>
+<p><a target="_blank" rel="noopener" href="https://www.jianshu.com/p/bf3fdd21153e">DESeq2的建模原理及简单用法</a></p>
+</blockquote>
+<h1 id="DESeq2的差异表达分析步骤"><a href="#DESeq2的差异表达分析步骤" class="headerlink" title="DESeq2的差异表达分析步骤"></a>DESeq2的差异表达分析步骤</h1><p>具体步骤参见下面流程图中的蓝色部分:<div align="center"><img src="https://upload-images.jianshu.io/upload_images/6415244-90f498c756518ea0.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1091/format/webp" alt="avatar"></div></p>
+<p>简单地说，DESeq2将对原始reads进行建模，使用标准化因子(scale factor)来解释库深度的差异。然后，DESeq2估计基因的离散度，并缩小这些估计值以生成更准确的离散度估计，从而对reads count进行建模。最后，DESeq2拟合负二项分布的模型，并使用Wald检验或似然比检验进行假设检验。</p>
+<p>为什么说DESeq2复杂呢？因为上一篇文章讲了七个步骤，也仅仅只是完成了这个流程图中Estimate size facors这一步。</p>
+<p>在使用DESeq2进行基因表达差异分析之前，最重要的是明确我们的研究目的，了解数据中的变异来源。一旦我们了解了数据的主要变异来源，就可以在分析之前提前移除它们，或者通过将这些变量包含在统计模型的公式中对它们进行分析。</p>
+<p>DESeq2在进行分析之前需要我们自己书写公式，以便让软件知道变异来源以及在差异表达分析中，我们感兴趣的地方。以下面这个数据为例：<div align="center"><img src="https://upload-images.jianshu.io/upload_images/6415244-2266c47349c0643a.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/592/format/webp" alt="avatar"></div></p>
+<p>如果我们知道性别是数据中一个比较显著的变异来源，那么我们就需要将sex写入到统计模型的公式中。公式应该包含数据中的所有因素，这些因素解释了数据中主要的变化来源，其中<strong>公式中的最后一个因素，应为我们最为关注的因素</strong>。</p>
+<p>比如，我们想要知道treatment的影响，其中sex和age是主要的变异来源，那么我们的公式则应该为<code>design &lt;- ~sex + age + treatment</code></p>
+<blockquote>
+<p>公式中的波浪线应该在所有的代数式之前，从而告诉DESeq2在进行差异表达分析时，使用后面的公式。而公式中代数的名称应该与数据框中的列名相匹配。</p>
+</blockquote>
+<p>此外，DESeq2还允许我们研究变异之间的交互作用。比如，我们想知道sex对于treatment的影响，那么我们的公式就应该是<code>design &lt;- ~ sex + age + treatment + sex:treatment</code></p>
+<blockquote>
+<p>此处需要注意，因为我们关注的是sex对于treatment的交互作用，因此sex:treatment应该放在公式的最末尾</p>
+</blockquote>
+<p>接下来就是无脑运行软件，进行差异表达分析。</p>
+<p>首先创建一个DESeq2Dataset对象:</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">dds &lt;- DESeqDataSetFromTximport(txi, colData = meta, design = ~ sampletype)</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>txi是reads count的矩阵，每一行是一个基因，每一列是一个样本</li>
+<li>colData则是一个因子数据框，每一个因子表示一个样本，相同处理方式的样本采用同样的factor</li>
+<li>design就是刚刚上面所介绍的统计模型的公式</li>
+</ul>
+<p>txi和colData的描述可能有点抽象，这里举一个例子进一步说明：</p>
+<p>下面就是txi应该有的格式：<div align="center"><img src="https://upload-images.jianshu.io/upload_images/6415244-6d76b6d31942fab5.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/993/format/webp" alt="avatar"></div></p>
+<p>倘若txi如上图所示，则colData则应通过下述代码得到:</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">meta &lt;- factor(rep(c(&#x27;WT&#x27;,&#x27;KO&#x27;), each=3))</span><br><span class="line">meta &lt;- data.frame(row.names=colnames(txi), meta)</span><br></pre></td></tr></table></figure>
+
+<p>接下来进行差异表达分析，我们调用DESeq()函数即可:</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">dds &lt;- DESeq(dds)</span><br></pre></td></tr></table></figure>
+
+<p>这一步通过调用DESeq()，将软件的运行结果重新赋给了dds对象。虽然我们仅仅用了一个命令，但是其中涉及到了多个步骤。软件运行的输出信息打印出了它所执行的各个步骤：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">estimating size factors</span><br><span class="line">estimating dispersions</span><br><span class="line">gene-wise dispersion estimates</span><br><span class="line">mean-dispersion relationship</span><br><span class="line">final dispersion estimates</span><br><span class="line">fitting model and testing</span><br></pre></td></tr></table></figure>
+
+<p>除了这种无脑式的一键调用，DESeq2还提供了一些单独的功能，可以让我们一步一步地执行工作流中的每一步。接下来我们详细看看这几个步骤的原理</p>
+<h2 id="1-estimating-size-factors"><a href="#1-estimating-size-factors" class="headerlink" title="1. estimating size factors"></a>1. estimating size factors</h2><p>这一步也就是上一篇文章所说的文库矫正，通过取log，找中位数，减少异常值对scale factor的影响，从而找到一个合适的scale factor。</p>
+<p>我们要想单独运行这一步，可以使用函数estimateSizeFactors()，示例如下：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">dds &lt;- DESeqDataSetFromTximport(txi, colData = meta, design = ~ sampletype)</span><br><span class="line">## 计算sizefactors</span><br><span class="line">dds.sizefactor &lt;- estimateSizeFactors(dds)</span><br><span class="line">## 如果想要知道具体的sizefactor是多少，可以使用sizeFactors()函数</span><br><span class="line">sizeFactors(dds.sizefactor )</span><br></pre></td></tr></table></figure>
+
+<p>sizeFactors()函数除了可以查看表达矩阵评估得到的具体的sizefactor，还可以给一个DESeqDataSet对象的sizefactor赋值，这样DESeq2在对DESeqDataSet对象进行差异表达分析时，就可以使用这个赋值的sizefactor进行后续分析。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">dds &lt;- DESeqDataSetFromTximport(txi, colData = meta, design = ~ sampletype)</span><br><span class="line"># WT和KO两种处理，六个样本的sizefactor分别是2，2，2，8，9，10</span><br><span class="line">sizefactor &lt;- c(2,2,2,8,9,10)</span><br><span class="line">names(sizefactor) &lt;- c(&#x27;WT_1&#x27;,&#x27;WT_2&#x27;,&#x27;WT_3&#x27;,&#x27;KO_1&#x27;,&#x27;KO_2&#x27;,&#x27;KO_3&#x27;)</span><br><span class="line">sizeFactors(dds) &lt;- sizefactor</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>所以，如果你的样本加有spike-in，你通过各种方式最终得到了一个scale factor，也可以通过这种方式赋给你的基因表达数据集</p>
+</blockquote>
+<h2 id="2-Estimate-gene-wise-dispersion"><a href="#2-Estimate-gene-wise-dispersion" class="headerlink" title="2. Estimate gene-wise dispersion"></a>2. Estimate gene-wise dispersion</h2><p>差异表达分析的第二步是对数据离散程度的评估，在RNA-seq的reads count数据中，我们需要知道两点：</p>
+<ul>
+<li>为了确定差异表达的基因，我们需要根据组内(重复之间)的方差来确定基因的表达值在组间是否有显著差异</li>
+<li>组内(重复之间)的变异需要考虑到方差随表达量的平均值增加的情况，如下图所示(每个黑点是一个基因)。<div align="center"><img src="https://upload-images.jianshu.io/upload_images/6415244-6022d938c9dfd9a6.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1200/format/webp" alt="avatar"></div></li>
+</ul>
+<p>为了更加准确的确定差异表达基因，DESeq2需要解释方差和均值的关系。从上图可知，在低表达的基因中，它们的方差也更低，因此DESeq2不希望差异表达基因都是低表达基因。</p>
+<p>DESeq2使用离散度(dispersion)作为方差的度量方式，离散度既可以解释基因表达值的方差也可以解释基因的平均表达值。其具体公式为：<code>Var = μ + α*μ^2</code>。其中Var表示方差，μ表示均值，α表示离散度。因此我们可以得到这么一个关系:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>离散度</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>方差增加</td>
+<td>离散度增加</td>
+</tr>
+<tr>
+<td>平均值增加</td>
+<td>离散度降低</td>
+</tr>
+</tbody></table>
+<p>那么在表达水平较高的基因中，离散度的平方根$$\sqrt{\alpha}$$就等于方差系数$$\frac{\sigma}{\mu}$$。其中σ是标准差，μ是平均值。那么α&#x3D;0.01就意味着，在样本生物重复之间存在着10%的标准差(μ&#x3D;1?)。</p>
+<blockquote>
+<p>表达水平较高时，μ对于公式的影响显著小于μ^2</p>
+</blockquote>
+<p>因此，<strong>具有相同平均值的基因的离散度仅根据其方差而存在差异，离散度反映了一个给定平均值的基因表达的差异程度</strong>。</p>
+<p>那么接下来一个比较重要的问题，就是如何将离散度与我们的模型建立联系呢？为了更精确的为我们的数据建模，我们需要知道每个组内方差的精确评估值。</p>
+<p>但是，生物这个行当，一般3个重复就了不起了，6个重复就顶破天了。看起来似乎挺多的，但是远远不够，这就导致我们得到的组内方差是相当的不可靠……</p>
+<blockquote>
+<p>6个重复都不一定够，所以那些做RNA-seq一个处理只有一个重复的同学，你们是想搞事情么？</p>
+</blockquote>
+<p>针对这个问题，DESeq2使用一种叫作<code>shrinkage</code>的方法，共享基因之间的表达信息，根据基因的表达水平生成更为准确的方差估计。<strong>DESeq2假设具有相似表达水平的基因也具有相似的方差</strong>。这样DESeq2就可以基于基因的平均表达水平和离散度来评估每个基因的离散度。</p>
+<blockquote>
+<p>在下文里我就暂且把<code>shrinkage</code>翻译为收缩</p>
+</blockquote>
+<h2 id="3-Fit-curve-to-gene-wise-dispersion-estimates"><a href="#3-Fit-curve-to-gene-wise-dispersion-estimates" class="headerlink" title="3. Fit curve to gene-wise dispersion estimates"></a>3. Fit curve to gene-wise dispersion estimates</h2><p>DESeq2的第三步就是根据基因的离散度拟合一个曲线。那么为什么要做拟合呢？不同的基因生物学重复中存在不同的方差，但是，在所有的基因中，将会有一个合理的离散分布。</p>
+<p>这个曲线如下图红线所示，其中红线的横坐标是基因的表达强度，纵坐标是理论离散值。而每一个黑点的横坐标是基因的平均表达水平，纵坐标是经过最大似然估计的离散值。<div align="center"><img src="https://upload-images.jianshu.io/upload_images/6415244-752512d1028a4009.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/850/format/webp" alt="avatar"></div></p>
+<h2 id="4-Shrink-gene-wise-dispersion-estimates-toward-the-values-predicted-by-the-curve"><a href="#4-Shrink-gene-wise-dispersion-estimates-toward-the-values-predicted-by-the-curve" class="headerlink" title="4. Shrink gene-wise dispersion estimates toward the values predicted by the curve"></a>4. Shrink gene-wise dispersion estimates toward the values predicted by the curve</h2><p>有了拟合曲线，接下来就是对基因表达水平的离散度进行矫正，即：**将基因的实际离散度向红线收缩(shrink)**。当样本量较小时，该曲线可以让我们更为准确的识别差异表达基因。既然知道要将基因的离散度向红色曲线收缩，那么收缩多少比较合适呢？有两点需要考虑：</p>
+<ul>
+<li>基因的离散度距离红色曲线的距离</li>
+<li>样本量（样本量越大，则收缩的越少）</li>
+</ul>
+<p>这种方法在差异表达分析时，可以极大的减少数据的假阳性。离散度较低的基因朝着理论值收缩，从而得到一个更为准确的离散值。<strong>而那些离散度较高的基因，则不能无脑朝着理论值收缩</strong>。</p>
+<p>这是因为这类基因可能不遵循建模假设，并且由于生物学或技术原因使得这类基因与其他基因具有更高的方差。DESeq2识别这类基因后，将不采用shrink方法对它们进行处理。下图中蓝色圆圈圈住的便是这类基因。<div align="center"><img src="https://upload-images.jianshu.io/upload_images/6415244-65408f30140e4690.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1200/format/webp" alt="avatar"></div></p>
+<h2 id="5-GLM-fit-for-each-gene"><a href="#5-GLM-fit-for-each-gene" class="headerlink" title="5. GLM fit for each gene"></a>5. GLM fit for each gene</h2><p>DESeq2的第五步，对每个基因使用广义线性模型进行拟合，我自己也没搞明白，就不在这里献丑了</p>
+<p>写在后面的话<br>也许你会问既然DESeq()函数可以一键实现这么多操作，为什么还要一步一步单拎出来做呢？主要是我自己有点强迫症，知其然不知其所以然的感觉太痛苦了……更何况，有了spike-in的教训，我还敢无脑运行软件么？</p>
+
+      
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+        <div class="post-eof"></div>
+      
+    </footer>
+  </article>
+</div>
+
+
+
+
+    
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="">
+    <link itemprop="mainEntityOfPage" href="https://fentouxungui.github.io/2019/10/12/LoomR/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="Yongchao Zhang">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="FenTouXunGui">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="undefined | FenTouXunGui">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          <a href="/2019/10/12/LoomR/" class="post-title-link" itemprop="url">LoomR</a>
+        </h2>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2019-10-12 20:43:03" itemprop="dateCreated datePublished" datetime="2019-10-12T20:43:03+08:00">2019-10-12</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">更新于</span>
+      <time title="修改时间：2020-06-10 15:51:31" itemprop="dateModified" datetime="2020-06-10T15:51:31+08:00">2020-06-10</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/%E5%8D%95%E7%BB%86%E8%83%9E/" itemprop="url" rel="index"><span itemprop="name">单细胞</span></a>
+        </span>
+    </span>
+
+  
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+          <blockquote>
+<p>loom 文件逐渐被广泛用于单细胞数据存储，Seurat Team 研发了 LoomR 包用于处理 loom 文件，并与 Seurat 包无缝接合。本文翻译了 Seurat 网站上对于 LoomR 包的介绍。<a target="_blank" rel="noopener" href="https://satijalab.org/loomR/loomR_tutorial.html">原文</a>发表于 2018-04-22。</p>
+</blockquote>
+<h2 id="关于-loom-文件"><a href="#关于-loom-文件" class="headerlink" title="关于 loom 文件"></a>关于 loom 文件</h2><p>单细胞数据量越来越大，计算需求也以指数形式增长。<code>Seurat Team</code> 发现，尽管使用 <code>sparse matrices</code>， 对于分析 &gt; 100,000 数目的细胞，也是一个严峻挑战，主要的困难是在内存中加载存储单细胞数据。<code>HDF5</code>数据格式可以解决这个问题，它不是在内存中存储数据，而是在硬盘上进行有效的数据存储，因而也适用于百万级的细胞数目。</p>
+          <!--noindex-->
+            <div class="post-button">
+              <a class="btn" href="/2019/10/12/LoomR/#more" rel="contents">
+                阅读全文 &raquo;
+              </a>
+            </div>
+          <!--/noindex-->
+        
+      
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+        <div class="post-eof"></div>
+      
+    </footer>
+  </article>
+</div>
+
+
+
+
+    
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="">
+    <link itemprop="mainEntityOfPage" href="https://fentouxungui.github.io/2019/10/09/linux-basis-4/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="Yongchao Zhang">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="FenTouXunGui">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="undefined | FenTouXunGui">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          <a href="/2019/10/09/linux-basis-4/" class="post-title-link" itemprop="url">Shell：文本操作</a>
+        </h2>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2019-10-09 07:34:49" itemprop="dateCreated datePublished" datetime="2019-10-09T07:34:49+08:00">2019-10-09</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">更新于</span>
+      <time title="修改时间：2020-01-10 09:39:19" itemprop="dateModified" datetime="2020-01-10T09:39:19+08:00">2020-01-10</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/Linux/" itemprop="url" rel="index"><span itemprop="name">Linux</span></a>
+        </span>
+    </span>
+
+  
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+          <blockquote>
+<p>转自 - 生信技能树： <a target="_blank" rel="noopener" href="https://mp.weixin.qq.com/s?__biz=MzAxMDkxODM1Ng==&mid=2247485539&idx=1&sn=cbb02d48ea5bb90ee5bdf35d501ee428&chksm=9b4848d8ac3fc1ce58b14128a138c100d305cb70c61180b523c21ad4859fdcc2cd7e96a75c99&scene=21#wechat_redirect">linux命令行文本操作一文就够</a></p>
+</blockquote>
+<p>主要是 <code>awk/grep/sed</code> 这三驾马车，加上vi这个神器，最后辅助一些小工具，包括 <code>wc,cat,diff,join,paste,cut,uniq</code>。</p>
+<p>这里 简要地整理下 Linux 用来处理数据文本的工具。具体命令详情请在 Linux 命令大全中搜索或者查阅其他相关资料。</p>
+<p><code>head, tail</code> 查看文档头尾。 <code>-n</code> 选项可以指定行数。</p>
+<p><code>less</code> 用来查阅文档， <code>q</code> 退出， <code>space bar</code> 翻页， <code>g</code> 第一行， <code>G</code> 最后一行， <code>j</code> 下， <code>k</code> 上, &#x2F;<code>&lt;pattern&gt;</code> 往下搜索模式， <code>?&lt;pattern&gt;</code> 往上搜索模式， <code>n</code> 前一个匹配字符， <code>N</code> 后一个匹配字符。</p>
+          <!--noindex-->
+            <div class="post-button">
+              <a class="btn" href="/2019/10/09/linux-basis-4/#more" rel="contents">
+                阅读全文 &raquo;
+              </a>
+            </div>
+          <!--/noindex-->
+        
+      
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+        <div class="post-eof"></div>
+      
+    </footer>
+  </article>
+</div>
+
+
+
+
+    
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="">
+    <link itemprop="mainEntityOfPage" href="https://fentouxungui.github.io/2019/10/09/linux-basis-3/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="Yongchao Zhang">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="FenTouXunGui">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="undefined | FenTouXunGui">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          <a href="/2019/10/09/linux-basis-3/" class="post-title-link" itemprop="url">Shell：系统环境变量</a>
+        </h2>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2019-10-09 07:28:16" itemprop="dateCreated datePublished" datetime="2019-10-09T07:28:16+08:00">2019-10-09</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">更新于</span>
+      <time title="修改时间：2020-01-10 09:39:19" itemprop="dateModified" datetime="2020-01-10T09:39:19+08:00">2020-01-10</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/Linux/" itemprop="url" rel="index"><span itemprop="name">Linux</span></a>
+        </span>
+    </span>
+
+  
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+          <blockquote>
+<p>转自 - 生信技能树 (链接不知道去哪里了！)</p>
+</blockquote>
+<p>Linux 是一个多用户的操作系统。每个用户登录系统后，都会有一个专用的运行环境。 通常每个用户默认的环境都是相同的，这个默认环境实际上就是一组环境变量的定义。环境变量是全局的，设置好的环境变量可以被所有当前用户所运行的程序所使用。 用户可以对自己的运行环境进行定制，其方法就是修改相应的系统环境变量。</p>
+<p>环境变量有很多，需要重点理解的就是 <code>PATH</code> 。</p>
+<p>比如说：bwa软件就没有添加到环境变量，所以需要用全路径，指明使用电脑里面什么地方的bwa软件来做数据分析，而 samtools 我已经添加到环境变量了，所以可以直接调用。</p>
+          <!--noindex-->
+            <div class="post-button">
+              <a class="btn" href="/2019/10/09/linux-basis-3/#more" rel="contents">
+                阅读全文 &raquo;
+              </a>
+            </div>
+          <!--/noindex-->
+        
+      
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+        <div class="post-eof"></div>
+      
+    </footer>
+  </article>
+</div>
+
+
+
+
+    
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="">
+    <link itemprop="mainEntityOfPage" href="https://fentouxungui.github.io/2019/10/09/linux-basis-2/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="Yongchao Zhang">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="FenTouXunGui">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="undefined | FenTouXunGui">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          <a href="/2019/10/09/linux-basis-2/" class="post-title-link" itemprop="url">Shell：脚本知识</a>
+        </h2>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2019-10-09 07:21:04" itemprop="dateCreated datePublished" datetime="2019-10-09T07:21:04+08:00">2019-10-09</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">更新于</span>
+      <time title="修改时间：2020-01-10 09:39:19" itemprop="dateModified" datetime="2020-01-10T09:39:19+08:00">2020-01-10</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/Linux/" itemprop="url" rel="index"><span itemprop="name">Linux</span></a>
+        </span>
+    </span>
+
+  
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+          <blockquote>
+<p>转自 - 生信技能树：<a target="_blank" rel="noopener" href="https://mp.weixin.qq.com/s?__biz=MzAxMDkxODM1Ng==&mid=2247485523&idx=1&sn=32fa28c74775956cf46dc82d24b9fa0c&chksm=9b4848e8ac3fc1fe9fa91ab064848af0d133a617f9a2afd4bb3bff2d623e397cab881de304f8&scene=21#wechat_redirect">构建shell脚本一文就够</a></p>
+</blockquote>
+<p>非常多的朋友在看我们公众号过往转录组，WES,等流程分享的时候发现很难理解我们的代码，其实就是缺乏shell脚本知识，那么这篇教程你就不容错过。</p>
+<h2 id="内容"><a href="#内容" class="headerlink" title="内容"></a>内容</h2><ul>
+<li>使用多个命令</li>
+<li>创建脚本文件</li>
+<li>显示消息</li>
+<li>使用变量</li>
+<li>输入输出重定向</li>
+<li>管道</li>
+<li>数学运算</li>
+<li>退出脚本
+          <!--noindex-->
+            <div class="post-button">
+              <a class="btn" href="/2019/10/09/linux-basis-2/#more" rel="contents">
+                阅读全文 &raquo;
+              </a>
+            </div>
+          <!--/noindex-->
+        
+      
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+        <div class="post-eof"></div>
+      
+    </footer>
+  </article>
+</div>
+
+
+
+
+    
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="">
+    <link itemprop="mainEntityOfPage" href="https://fentouxungui.github.io/2019/10/09/linux-basis-1/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="Yongchao Zhang">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="FenTouXunGui">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="undefined | FenTouXunGui">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          <a href="/2019/10/09/linux-basis-1/" class="post-title-link" itemprop="url">Shell： 入门Linux</a>
+        </h2>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2019-10-09 07:09:11" itemprop="dateCreated datePublished" datetime="2019-10-09T07:09:11+08:00">2019-10-09</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">更新于</span>
+      <time title="修改时间：2020-01-10 09:39:19" itemprop="dateModified" datetime="2020-01-10T09:39:19+08:00">2020-01-10</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/Linux/" itemprop="url" rel="index"><span itemprop="name">Linux</span></a>
+        </span>
+    </span>
+
+  
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+          <blockquote>
+<p>转自 - 生信技能树: <a target="_blank" rel="noopener" href="https://mp.weixin.qq.com/s/2RqjIWEARgMmk3h_sAYtUw">生信分析人员如何系统入门Linux(2019更新版)</a></p>
+</blockquote>
+<p>可以把 Linux 的学习过程分成6个阶段，一般来说，每个阶段都需要至少一天以上的学习：</p>
+<ul>
+<li>第1阶段：把linux系统玩得跟 Windows 或者 MacOS 那样的桌面操作系统一样顺畅，主要目的就是去可视化，熟悉黑白命令行界面，可以仅仅以键盘交互模式完成常规文件夹及文件管理工作。</li>
+<li>第2阶段：做到文本文件的表格化处理，类似于以键盘交互模式完成Excel表格的排序、计数、筛选、去冗余，查找，切割，替换，合并，补齐，熟练掌握<code>awk,sed,grep</code>这文本处理的三驾马车。</li>
+<li>第3阶段：元字符，通配符及 shell 中的各种扩展，从此 linux 操作不在神秘！</li>
+<li>第4阶段：高级目录管理：软硬链接，绝对路径和相对路径，环境变量</li>
+<li>第5阶段：任务提交及批处理，脚本编写解放你的双手</li>
+<li>第6阶段：软件安装及 conda 管理，让 linux 系统实用性放飞自我
+          <!--noindex-->
+            <div class="post-button">
+              <a class="btn" href="/2019/10/09/linux-basis-1/#more" rel="contents">
+                阅读全文 &raquo;
+              </a>
+            </div>
+          <!--/noindex-->
+        
+      
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+        <div class="post-eof"></div>
+      
+    </footer>
+  </article>
+</div>
+
+
+
+
+    
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="">
+    <link itemprop="mainEntityOfPage" href="https://fentouxungui.github.io/2019/09/24/test-markdown/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="Yongchao Zhang">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="FenTouXunGui">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="undefined | FenTouXunGui">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          <a href="/2019/09/24/test-markdown/" class="post-title-link" itemprop="url">test-markdown</a>
+        </h2>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2019-09-24 17:41:43" itemprop="dateCreated datePublished" datetime="2019-09-24T17:41:43+08:00">2019-09-24</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">更新于</span>
+      <time title="修改时间：2020-01-10 09:39:19" itemprop="dateModified" datetime="2020-01-10T09:39:19+08:00">2020-01-10</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/%E6%B5%8B%E8%AF%95/" itemprop="url" rel="index"><span itemprop="name">测试</span></a>
+        </span>
+    </span>
+
+  
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+          <h3 id="1-标题"><a href="#1-标题" class="headerlink" title="1. 标题"></a>1. 标题</h3><h1 id="h1-一级标题"><a href="#h1-一级标题" class="headerlink" title="h1 一级标题"></a>h1 一级标题</h1><h2 id="h2-二级标题"><a href="#h2-二级标题" class="headerlink" title="h2 二级标题"></a>h2 二级标题</h2>
+          <!--noindex-->
+            <div class="post-button">
+              <a class="btn" href="/2019/09/24/test-markdown/#more" rel="contents">
+                阅读全文 &raquo;
+              </a>
+            </div>
+          <!--/noindex-->
+        
       
     </div>
 
