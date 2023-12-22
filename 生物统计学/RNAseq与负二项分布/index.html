@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 7.0.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"fentouxungui.github.io","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="RNA-seq中的那些统计学问题（一）为什么是负二项分布？   WHY SEQUENCING DATA IS MODELED AS NEGATIVE BINOMIAL   RNA-seq分析中的dispersion，你知道吗？   DESeq2的建模原理及简单用法  1. 转录组数据统计推断的难题在RNA-seq中进行两组间的差异分析是最正常不过的了。 我们在其它实验中同样会遇到类似的分析，">
+<meta property="og:type" content="article">
+<meta property="og:title" content="RNAseq与负二项分布">
+<meta property="og:url" content="https://fentouxungui.github.io/%E7%94%9F%E7%89%A9%E7%BB%9F%E8%AE%A1%E5%AD%A6/RNAseq%E4%B8%8E%E8%B4%9F%E4%BA%8C%E9%A1%B9%E5%88%86%E5%B8%83/index.html">
+<meta property="og:site_name" content="坐在坟头训鬼">
+<meta property="og:description" content="RNA-seq中的那些统计学问题（一）为什么是负二项分布？   WHY SEQUENCING DATA IS MODELED AS NEGATIVE BINOMIAL   RNA-seq分析中的dispersion，你知道吗？   DESeq2的建模原理及简单用法  1. 转录组数据统计推断的难题在RNA-seq中进行两组间的差异分析是最正常不过的了。 我们在其它实验中同样会遇到类似的分析，">
+<meta property="og:locale">
+<meta property="og:image" content="https://upload-images.jianshu.io/upload_images/15455040-0b8acdcca1b63243.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/650/format/webp">
+<meta property="og:image" content="https://upload-images.jianshu.io/upload_images/15455040-214b68916f1ac575.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/946/format/webp">
+<meta property="article:published_time" content="2022-09-24T09:41:43.000Z">
+<meta property="article:modified_time" content="2023-12-22T01:52:16.194Z">
+<meta property="article:author" content="张永超">
+<meta property="article:tag" content="RNAseq">
+<meta property="article:tag" content="负二项分布">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://upload-images.jianshu.io/upload_images/15455040-0b8acdcca1b63243.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/650/format/webp">
+
+<link rel="canonical" href="https://fentouxungui.github.io/%E7%94%9F%E7%89%A9%E7%BB%9F%E8%AE%A1%E5%AD%A6/RNAseq%E4%B8%8E%E8%B4%9F%E4%BA%8C%E9%A1%B9%E5%88%86%E5%B8%83/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-Hans'
+  };
+</script>
+
+  <title>RNAseq与负二项分布 | 坐在坟头训鬼</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">坐在坟头训鬼</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">欢迎访问我的个人站点</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-Hans">
+    <link itemprop="mainEntityOfPage" href="https://fentouxungui.github.io/%E7%94%9F%E7%89%A9%E7%BB%9F%E8%AE%A1%E5%AD%A6/RNAseq%E4%B8%8E%E8%B4%9F%E4%BA%8C%E9%A1%B9%E5%88%86%E5%B8%83/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="张永超">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="坐在坟头训鬼">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          RNAseq与负二项分布
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-09-24 17:41:43" itemprop="dateCreated datePublished" datetime="2022-09-24T17:41:43+08:00">2022-09-24</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2023-12-22 09:52:16" itemprop="dateModified" datetime="2023-12-22T09:52:16+08:00">2023-12-22</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/%E7%94%9F%E7%89%A9%E7%BB%9F%E8%AE%A1%E5%AD%A6/" itemprop="url" rel="index"><span itemprop="name">生物统计学</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=default"></script>
+
+<blockquote>
+<p><a target="_blank" rel="noopener" href="https://www.jianshu.com/p/ad24bb90b972">RNA-seq中的那些统计学问题（一）为什么是负二项分布？</a></p>
+</blockquote>
+<blockquote>
+<p><a target="_blank" rel="noopener" href="https://bioramble.wordpress.com/2016/01/30/why-sequencing-data-is-modeled-as-negative-binomial/">WHY SEQUENCING DATA IS MODELED AS NEGATIVE BINOMIAL</a></p>
+</blockquote>
+<blockquote>
+<p><a target="_blank" rel="noopener" href="https://mp.weixin.qq.com/s/UTmSzCgDIFYbG2WByzaqQQ">RNA-seq分析中的dispersion，你知道吗？</a></p>
+</blockquote>
+<blockquote>
+<p><a target="_blank" rel="noopener" href="https://www.jianshu.com/p/bf3fdd21153e">DESeq2的建模原理及简单用法</a></p>
+</blockquote>
+<h1 id="1-转录组数据统计推断的难题"><a href="#1-转录组数据统计推断的难题" class="headerlink" title="1. 转录组数据统计推断的难题"></a>1. 转录组数据统计推断的难题</h1><p>在RNA-seq中进行两组间的差异分析是最正常不过的了。</p>
+<p>我们在其它实验中同样会遇到类似的分析，通常，我们可以用方差分析判定两组“分布”数据间是否存在显著差异。原理是：当组间方差大于组内方差（误差效应），并且统计学显著时，则认为组间处理是可以引起差异的。</p>
+<p>有伙伴肯定要问，转录组数据到底有什么了不起的？它们为什么不能用我们熟悉的算法简单地进行计算？</p>
+<p>其实统计学家也很无奈啊，看看我们转录组实验得到的这些数据吧：我们的实验只进行少得可怜的生物学重复（n&lt;10），而且，任何基因的表达量都不能是负数，这些数据并不符合正态分布，用于表征表达量的counts是非连续的（芯片信号是连续的），RNA-seq数据的离散通常是高度扭曲的，方差往往会大于均值……，就这些奇怪的特征，使得准确估计方差并没有想象的那么容易。</p>
+<span id="more"></span>
+
+<p>我们面临两个核心问题：</p>
+<ul>
+<li><p>基因表达数据适合用什么统计学分布进行差异显著性检验？</p>
+</li>
+<li><p>如何利用少量生物学重复数据估算基因表达的标准差？</p>
+</li>
+</ul>
+<h1 id="2-泊松分布-or-负二项分布？"><a href="#2-泊松分布-or-负二项分布？" class="headerlink" title="2. 泊松分布 or 负二项分布？"></a>2. 泊松分布 or 负二项分布？</h1><p>从统计学的角度出发，进行差异分析肯定会需要假设检验，通常对于分布已知的数据，运用参数检验结果的假阳性率会更低。转录组数据中，<strong>raw count值符合什么样的分布呢？</strong></p>
+<p>count值本质是reads的数目，是一个非零整数，而且是离散的，其分布肯定也是<strong>离散型分布</strong>。对于转录组数据，学术界常用的分布包括泊松分布 (poisson)和负二项分布 (negative binomial)两种。</p>
+<h2 id="2-1-为什么泊松分布不行？"><a href="#2-1-为什么泊松分布不行？" class="headerlink" title="2.1. 为什么泊松分布不行？"></a>2.1. 为什么泊松分布不行？</h2><p>首先有必要简单地介绍一下泊松分布</p>
+<blockquote>
+<p>泊松分布适合于描述单位时间（或空间）内随机事件发生的次数（事件发生的次数只能是离散的整数）。如某一服务设施在一定时间内到达的人数，电话交换机接到呼叫的次数，汽车站台的候客人数，机器出现的故障数，自然灾害发生的次数，一块产品上的缺陷数，显微镜下单位分区内的细菌分布数等等。</p>
+<p>$$P(X&#x3D;k)&#x3D;\frac{\lambda^k }{k!}e^{-\lambda},\quad k&#x3D;0,1,…$$</p>
+<p>泊松分布大概长这样：</p>
+<div align="center">![avatar](https://upload-images.jianshu.io/upload_images/15455040-a22a1135a6210c4b.png?imageMogr2/auto-orient/strip|imageView2/2/w/565/format/webp)</div>
+
+<p>λ是波松分布所依赖的唯一参数。 λ值愈小分布愈偏倚，随着λ的增大，分布趋于对称。 当λ&#x3D;20时分布接近于正态分布；当λ&#x3D;50时， 可以认为波松分布呈正态分布。</p>
+</blockquote>
+<p>在数据分析的早期，确实有学者采用泊松分布进行差异分析，但是发展到现在，几乎全部都是基于负二项分布了，究竟是什么因素导致了这种现象呢？为了解释这个问题，我们必须提到一个概念 overdispersion。</p>
+<p>dispersion指的是离散程度，研究一个数据分布的离散程度，我们常用方差这个指标。<strong>对于泊松分布而言，其均值和方差是相等的</strong>，但是我们的数据确不符合这样的规律。通过计算所有基因的均值和方差，可以绘制如下的图片：<div align="center"><img src="https://upload-images.jianshu.io/upload_images/15455040-0b8acdcca1b63243.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/650/format/webp" alt="avatar2"></div></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">mean &lt;- log10(apply(x, 1, mean))</span><br><span class="line">var &lt;- log10(apply(x, 1, var))</span><br><span class="line">plot(x = mean, y = var, pch = 20)</span><br><span class="line">abline(a = 0, b=1)</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line">library(DESeq2)</span><br><span class="line">library(matrixStats)</span><br><span class="line">library(magrittr)</span><br><span class="line">library(ggplot2)</span><br><span class="line"></span><br><span class="line">dds &lt;- readRDS(&quot;ddsMat.rds&quot;)</span><br><span class="line"></span><br><span class="line">mvDat &lt;- data.frame(</span><br><span class="line">  Mean = log10(unname(rowMeans(counts(dds,normalized = TRUE)))),</span><br><span class="line">  Variance = log10(rowVars(counts(dds,normalized = TRUE)))</span><br><span class="line">)</span><br><span class="line"></span><br><span class="line">ssDat &lt;- smooth.spline(x = mvDat$Mean, y = mvDat$Variance, spar = 1) %$%</span><br><span class="line">  data.frame(x = x, y = y)</span><br><span class="line"></span><br><span class="line">ggplot(mvDat, aes(x = Mean, y = Variance)) +</span><br><span class="line">  geom_point(size = 0.5, alpha = 0.6, colour = &quot;darkblue&quot;) +</span><br><span class="line">  geom_line(data = ssDat, aes(x = x, y = y), colour = &quot;red&quot;, size = 0.5) +</span><br><span class="line">  theme_bw() +</span><br><span class="line">  xlim(0,10) +</span><br><span class="line">  ylim(0,10) +</span><br><span class="line">  theme(plot.title = element_text(hjust = 0.5))</span><br></pre></td></tr></table></figure>
+
+<p>横坐标为基因在所有样本中的均值，纵坐标为基因在所有样本中的方差，直线的斜率为1，代表泊松分布的均值和方差的分布。可以看到，真实数据的分布是偏离了泊松分布的，方差明显比均值要大。</p>
+<p>如果假定总体分布为泊松分布， 根据我们的定量数据是无法估计出一个合理的参数，能够符合上图中所示分布的，这样的现象就称之为overdispersion。</p>
+<p>由于真实数据与泊松分布之间的overdispersion，选择泊松分布分布作为总体的分布是不合理。</p>
+<p>以上只证明了泊松分布是个不太恰当的分布估计，那怎么证明负二项分布就是合适的分布估计呢？</p>
+<h2 id="2-2-为什么负二项分布行？"><a href="#2-2-为什么负二项分布行？" class="headerlink" title="2.2. 为什么负二项分布行？"></a>2.2. 为什么负二项分布行？</h2><p>主要是从均值与方差之间的关系去证明</p>
+<p>同样的，也先简单介绍一下负二项分布：</p>
+<blockquote>
+<p>伯努利试验（Bernoulli experiment）是在同样的条件下重复地、相互独立地进行的一种随机试验，其特点是该随机试验只有两种可能结果：发生或者不发生。 我们假设该项试验独立重复地进行了n次，那么就称这一系列重复独立的随机试验为n重伯努利试验，或称为伯努利概型。</p>
+<p>二项分布描述的是n重伯努利实验，在n重贝努利试验中，事件A恰好发生x(0≤x≤n)次的概率为：</p>
+<p>$$P_n(x)&#x3D;C_n^x p^x(1-p)^{n-x}$$</p>
+<p>它的概率分布图如下：</p>
+<div align="center">![avatar](https://upload-images.jianshu.io/upload_images/15455040-dca31277fae85216.jpg?imageMogr2/auto-orient/strip|imageView2/2/w/532/format/webp)</div>
+
+<p>负二项分布描述的也是<strong>伯努利实验</strong>，不过它的目标事件变成了：对于Bernoulli过程，我们设定，当某个结果出现固定次数的时候，整个过程的数量，比如我们生产某个零件，假设每个零件的合格与否都是相互独立的，且分布相同，那么当我们生产出了五个不合格零件时，一共生产了多少合格的零件，这个数量就是一个负二项分布，公式如下：</p>
+<blockquote>
+<p>$$f(k;r;p)&#x3D;P(x&#x3D;k)&#x3D;C_{r+k-1}^k p^k(1-p)^r$$</p>
+</blockquote>
+<p>该公式描述的是，在合格率为p的一堆产品中，进行连续有放回的抽样，当抽到r个次品时，停止抽样，此时抽到的正品正好为k个的概率</p>
+<p>它的概率分布如下：</p>
+<div align="center">![avatar](https://upload-images.jianshu.io/upload_images/15455040-4088dc93a55c97da.png?imageMogr2/auto-orient/strip|imageView2/2/w/260/format/webp)</div>
+<div align="center">p=0.5, r=5</div>
+
+</blockquote>
+<p>负二项分布的均值和方差分别为(<font color=#FF0000> 如何推导出来的？</font>)：</p>
+<p>$$\mu&#x3D;\frac{pr}{1-p}$$</p>
+<p>$$\sigma^2&#x3D;\frac{pr}{(1-p)^2}$$</p>
+<p>将p用μ表示，得到：</p>
+<p>$$p&#x3D;\frac{\mu}{\mu+r},\quad 1-p&#x3D;\frac{r}{\mu+r}$$</p>
+<p>将上一步推出的p和1-p带入到方差的表达式中，得到：</p>
+<p>$$\sigma^2&#x3D;\frac{\mu^2}{r}+\mu$$</p>
+<p>记1&#x2F;r&#x3D;α，则</p>
+<p>$$\sigma^2&#x3D;\mu+\alpha\mu^2$$</p>
+<p>从上面的式子可以看出，均值是方差的二次函数，方差随着均值的增加而进行二次函数形式的递增，正好符合上文 <code>2.1. 为什么泊松分布不行？ 部分均值与方差分布图的情况</code></p>
+<p>其中<code>α</code>和<code>r</code>被称为dispersion parameter</p>
+<p>负二项分布与泊松分布的关系，可以用<code>α</code>或<code>r</code>推出：</p>
+<blockquote>
+<p>当 r -&gt; ∞ 时，α -&gt; 0，此时 σ2&#x3D; μ，为泊松分布；</p>
+</blockquote>
+<blockquote>
+<p>当 r -&gt; 0 时，α -&gt; ∞，此时overdispersion</p>
+</blockquote>
+<h2 id="3-方差估计"><a href="#3-方差估计" class="headerlink" title="3. 方差估计"></a>3. 方差估计</h2><p>在生物学重复很少时，我们是很难准确计算每个基因表达的标准差的（相当于这个数据集的离散程度）。我们很可能会低估数据的离散程度。</p>
+<p>被逼无奈的科学家提出了一个假设：<strong>表达丰度相似的基因，在总体上标准差应该也是相似的</strong>。我们把不同生物学重复中表达丰度相同的基因的总标准差取个平均值，低于这个值的都用这个值，高于这个值的就用算出来的值。<div align="center"><img src="https://upload-images.jianshu.io/upload_images/15455040-214b68916f1ac575.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/946/format/webp" alt="avatar"></div></p>
+<div align="center">![avatar](https://upload-images.jianshu.io/upload_images/15455040-7249241acedb1533.png?imageMogr2/auto-orient/strip|imageView2/2/w/952/format/webp)</div>
+
+
+
+
+
+
+
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/RNAseq/" rel="tag"># RNAseq</a>
+              <a href="/tags/%E8%B4%9F%E4%BA%8C%E9%A1%B9%E5%88%86%E5%B8%83/" rel="tag"># 负二项分布</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/%E5%8D%95%E7%BB%86%E8%83%9E/LoomR/" rel="prev" title="LoomR">
+      <i class="fa fa-chevron-left"></i> LoomR
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/%E7%94%9F%E4%BF%A1%E8%BD%AF%E4%BB%B6/DESeq2%E7%9A%84%E5%BB%BA%E6%A8%A1%E5%8E%9F%E7%90%86%E5%8F%8A%E7%AE%80%E5%8D%95%E7%94%A8%E6%B3%95/" rel="next" title="DESeq2">
+      DESeq2 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#1-%E8%BD%AC%E5%BD%95%E7%BB%84%E6%95%B0%E6%8D%AE%E7%BB%9F%E8%AE%A1%E6%8E%A8%E6%96%AD%E7%9A%84%E9%9A%BE%E9%A2%98"><span class="nav-number">1.</span> <span class="nav-text">1. 转录组数据统计推断的难题</span></a></li><li class="nav-item nav-level-1"><a class="nav-link" href="#2-%E6%B3%8A%E6%9D%BE%E5%88%86%E5%B8%83-or-%E8%B4%9F%E4%BA%8C%E9%A1%B9%E5%88%86%E5%B8%83%EF%BC%9F"><span class="nav-number">2.</span> <span class="nav-text">2. 泊松分布 or 负二项分布？</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#2-1-%E4%B8%BA%E4%BB%80%E4%B9%88%E6%B3%8A%E6%9D%BE%E5%88%86%E5%B8%83%E4%B8%8D%E8%A1%8C%EF%BC%9F"><span class="nav-number">2.1.</span> <span class="nav-text">2.1. 为什么泊松分布不行？</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2-2-%E4%B8%BA%E4%BB%80%E4%B9%88%E8%B4%9F%E4%BA%8C%E9%A1%B9%E5%88%86%E5%B8%83%E8%A1%8C%EF%BC%9F"><span class="nav-number">2.2.</span> <span class="nav-text">2.2. 为什么负二项分布行？</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#3-%E6%96%B9%E5%B7%AE%E4%BC%B0%E8%AE%A1"><span class="nav-number">2.3.</span> <span class="nav-text">3. 方差估计</span></a></li></ol></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">张永超</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">8</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/fentouxungui" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;fentouxungui" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="/zhangyongchao@nibs.ac.cn" title="E-Mail → zhangyongchao@nibs.ac.cn"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+
+  <div class="links-of-blogroll motion-element">
+    <div class="links-of-blogroll-title"><i class="fa fa-link fa-fw"></i>
+      Links
+    </div>
+    <ul class="links-of-blogroll-list">
+        <li class="links-of-blogroll-item">
+          <a href="http://www.daokedao.site/" title="http:&#x2F;&#x2F;www.daokedao.site&#x2F;" rel="noopener" target="_blank">Xi Lab</a>
+        </li>
+        <li class="links-of-blogroll-item">
+          <a href="http://www.nibs.ac.cn/" title="http:&#x2F;&#x2F;www.nibs.ac.cn&#x2F;" rel="noopener" target="_blank">NIBS</a>
+        </li>
+    </ul>
+  </div>
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">张永超</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+      
+
+<script>
+  if (typeof MathJax === 'undefined') {
+    window.MathJax = {
+      loader: {
+        source: {
+          '[tex]/amsCd': '[tex]/amscd',
+          '[tex]/AMScd': '[tex]/amscd'
+        }
+      },
+      tex: {
+        inlineMath: {'[+]': [['$', '$']]},
+        tags: 'ams'
+      },
+      options: {
+        renderActions: {
+          findScript: [10, doc => {
+            document.querySelectorAll('script[type^="math/tex"]').forEach(node => {
+              const display = !!node.type.match(/; *mode=display/);
+              const math = new doc.options.MathItem(node.textContent, doc.inputJax[0], display);
+              const text = document.createTextNode('');
+              node.parentNode.replaceChild(text, node);
+              math.start = {node: text, delim: '', n: 0};
+              math.end = {node: text, delim: '', n: 0};
+              doc.math.push(math);
+            });
+          }, '', false],
+          insertedScript: [200, () => {
+            document.querySelectorAll('mjx-container').forEach(node => {
+              let target = node.parentNode;
+              if (target.nodeName.toLowerCase() === 'li') {
+                target.parentNode.classList.add('has-jax');
+              }
+            });
+          }, '', false]
+        }
+      }
+    };
+    (function () {
+      var script = document.createElement('script');
+      script.src = '//cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js';
+      script.defer = true;
+      document.head.appendChild(script);
+    })();
+  } else {
+    MathJax.startup.document.state(0);
+    MathJax.texReset();
+    MathJax.typeset();
+  }
+</script>
+
+    
+
+  
+
+</body>
+</html>

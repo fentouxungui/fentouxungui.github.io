@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 7.0.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"fentouxungui.github.io","root":"/","scheme":"Gemini","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="DESeq2的建模原理及简单用法  DESeq2的差异表达分析步骤具体步骤参见下面流程图中的蓝色部分: 简单地说，DESeq2将对原始reads进行建模，使用标准化因子(scale factor)来解释库深度的差异。然后，DESeq2估计基因的离散度，并缩小这些估计值以生成更准确的离散度估计，从而对reads count进行建模。最后，DESeq2拟合负二项分布的模型，并使用Wald检验或似">
+<meta property="og:type" content="article">
+<meta property="og:title" content="DESeq2">
+<meta property="og:url" content="https://fentouxungui.github.io/%E7%94%9F%E4%BF%A1%E8%BD%AF%E4%BB%B6/DESeq2%E7%9A%84%E5%BB%BA%E6%A8%A1%E5%8E%9F%E7%90%86%E5%8F%8A%E7%AE%80%E5%8D%95%E7%94%A8%E6%B3%95/index.html">
+<meta property="og:site_name" content="坐在坟头训鬼">
+<meta property="og:description" content="DESeq2的建模原理及简单用法  DESeq2的差异表达分析步骤具体步骤参见下面流程图中的蓝色部分: 简单地说，DESeq2将对原始reads进行建模，使用标准化因子(scale factor)来解释库深度的差异。然后，DESeq2估计基因的离散度，并缩小这些估计值以生成更准确的离散度估计，从而对reads count进行建模。最后，DESeq2拟合负二项分布的模型，并使用Wald检验或似">
+<meta property="og:locale">
+<meta property="og:image" content="https://upload-images.jianshu.io/upload_images/6415244-90f498c756518ea0.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1091/format/webp">
+<meta property="og:image" content="https://upload-images.jianshu.io/upload_images/6415244-2266c47349c0643a.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/592/format/webp">
+<meta property="og:image" content="https://upload-images.jianshu.io/upload_images/6415244-6d76b6d31942fab5.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/993/format/webp">
+<meta property="og:image" content="https://upload-images.jianshu.io/upload_images/6415244-6022d938c9dfd9a6.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1200/format/webp">
+<meta property="og:image" content="https://upload-images.jianshu.io/upload_images/6415244-752512d1028a4009.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/850/format/webp">
+<meta property="og:image" content="https://upload-images.jianshu.io/upload_images/6415244-65408f30140e4690.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1200/format/webp">
+<meta property="article:published_time" content="2022-10-08T23:09:11.000Z">
+<meta property="article:modified_time" content="2023-12-22T03:14:06.933Z">
+<meta property="article:author" content="张永超">
+<meta property="article:tag" content="DESeq2">
+<meta property="article:tag" content="RNAseq">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://upload-images.jianshu.io/upload_images/6415244-90f498c756518ea0.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1091/format/webp">
+
+<link rel="canonical" href="https://fentouxungui.github.io/%E7%94%9F%E4%BF%A1%E8%BD%AF%E4%BB%B6/DESeq2%E7%9A%84%E5%BB%BA%E6%A8%A1%E5%8E%9F%E7%90%86%E5%8F%8A%E7%AE%80%E5%8D%95%E7%94%A8%E6%B3%95/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-Hans'
+  };
+</script>
+
+  <title>DESeq2 | 坐在坟头训鬼</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">坐在坟头训鬼</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">欢迎访问我的个人站点</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>Categories</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-Hans">
+    <link itemprop="mainEntityOfPage" href="https://fentouxungui.github.io/%E7%94%9F%E4%BF%A1%E8%BD%AF%E4%BB%B6/DESeq2%E7%9A%84%E5%BB%BA%E6%A8%A1%E5%8E%9F%E7%90%86%E5%8F%8A%E7%AE%80%E5%8D%95%E7%94%A8%E6%B3%95/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="张永超">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="坐在坟头训鬼">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          DESeq2
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">Posted on</span>
+
+              <time title="Created: 2022-10-09 07:09:11" itemprop="dateCreated datePublished" datetime="2022-10-09T07:09:11+08:00">2022-10-09</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">Edited on</span>
+                <time title="Modified: 2023-12-22 11:14:06" itemprop="dateModified" datetime="2023-12-22T11:14:06+08:00">2023-12-22</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">In</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/%E7%94%9F%E4%BF%A1%E8%BD%AF%E4%BB%B6/" itemprop="url" rel="index"><span itemprop="name">生信软件</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=default"></script>
+
+<blockquote>
+<p><a target="_blank" rel="noopener" href="https://www.jianshu.com/p/bf3fdd21153e">DESeq2的建模原理及简单用法</a></p>
+</blockquote>
+<h1 id="DESeq2的差异表达分析步骤"><a href="#DESeq2的差异表达分析步骤" class="headerlink" title="DESeq2的差异表达分析步骤"></a>DESeq2的差异表达分析步骤</h1><p>具体步骤参见下面流程图中的蓝色部分:<div align="center"><img src="https://upload-images.jianshu.io/upload_images/6415244-90f498c756518ea0.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1091/format/webp" alt="avatar"></div></p>
+<p>简单地说，DESeq2将对原始reads进行建模，使用标准化因子(scale factor)来解释库深度的差异。然后，DESeq2估计基因的离散度，并缩小这些估计值以生成更准确的离散度估计，从而对reads count进行建模。最后，DESeq2拟合负二项分布的模型，并使用Wald检验或似然比检验进行假设检验。</p>
+<p>为什么说DESeq2复杂呢？因为上一篇文章讲了七个步骤，也仅仅只是完成了这个流程图中Estimate size facors这一步。</p>
+<p>在使用DESeq2进行基因表达差异分析之前，最重要的是明确我们的研究目的，了解数据中的变异来源。一旦我们了解了数据的主要变异来源，就可以在分析之前提前移除它们，或者通过将这些变量包含在统计模型的公式中对它们进行分析。</p>
+<span id="more"></span>
+<p>DESeq2在进行分析之前需要我们自己书写公式，以便让软件知道变异来源以及在差异表达分析中，我们感兴趣的地方。以下面这个数据为例：<div align="center"><img src="https://upload-images.jianshu.io/upload_images/6415244-2266c47349c0643a.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/592/format/webp" alt="avatar"></div></p>
+<p>如果我们知道性别是数据中一个比较显著的变异来源，那么我们就需要将sex写入到统计模型的公式中。公式应该包含数据中的所有因素，这些因素解释了数据中主要的变化来源，其中<strong>公式中的最后一个因素，应为我们最为关注的因素</strong>。</p>
+<p>比如，我们想要知道treatment的影响，其中sex和age是主要的变异来源，那么我们的公式则应该为<code>design &lt;- ~sex + age + treatment</code></p>
+<blockquote>
+<p>公式中的波浪线应该在所有的代数式之前，从而告诉DESeq2在进行差异表达分析时，使用后面的公式。而公式中代数的名称应该与数据框中的列名相匹配。</p>
+</blockquote>
+<p>此外，DESeq2还允许我们研究变异之间的交互作用。比如，我们想知道sex对于treatment的影响，那么我们的公式就应该是<code>design &lt;- ~ sex + age + treatment + sex:treatment</code></p>
+<blockquote>
+<p>此处需要注意，因为我们关注的是sex对于treatment的交互作用，因此sex:treatment应该放在公式的最末尾</p>
+</blockquote>
+<p>接下来就是无脑运行软件，进行差异表达分析。</p>
+<p>首先创建一个DESeq2Dataset对象:</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">dds &lt;- DESeqDataSetFromTximport(txi, colData = meta, design = ~ sampletype)</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>txi是reads count的矩阵，每一行是一个基因，每一列是一个样本</li>
+<li>colData则是一个因子数据框，每一个因子表示一个样本，相同处理方式的样本采用同样的factor</li>
+<li>design就是刚刚上面所介绍的统计模型的公式</li>
+</ul>
+<p>txi和colData的描述可能有点抽象，这里举一个例子进一步说明：</p>
+<p>下面就是txi应该有的格式：<div align="center"><img src="https://upload-images.jianshu.io/upload_images/6415244-6d76b6d31942fab5.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/993/format/webp" alt="avatar"></div></p>
+<p>倘若txi如上图所示，则colData则应通过下述代码得到:</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">meta &lt;- factor(rep(c(&#x27;WT&#x27;,&#x27;KO&#x27;), each=3))</span><br><span class="line">meta &lt;- data.frame(row.names=colnames(txi), meta)</span><br></pre></td></tr></table></figure>
+
+<p>接下来进行差异表达分析，我们调用DESeq()函数即可:</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">dds &lt;- DESeq(dds)</span><br></pre></td></tr></table></figure>
+
+<p>这一步通过调用DESeq()，将软件的运行结果重新赋给了dds对象。虽然我们仅仅用了一个命令，但是其中涉及到了多个步骤。软件运行的输出信息打印出了它所执行的各个步骤：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">estimating size factors</span><br><span class="line">estimating dispersions</span><br><span class="line">gene-wise dispersion estimates</span><br><span class="line">mean-dispersion relationship</span><br><span class="line">final dispersion estimates</span><br><span class="line">fitting model and testing</span><br></pre></td></tr></table></figure>
+
+<p>除了这种无脑式的一键调用，DESeq2还提供了一些单独的功能，可以让我们一步一步地执行工作流中的每一步。接下来我们详细看看这几个步骤的原理</p>
+<h2 id="1-estimating-size-factors"><a href="#1-estimating-size-factors" class="headerlink" title="1. estimating size factors"></a>1. estimating size factors</h2><p>这一步也就是上一篇文章所说的文库矫正，通过取log，找中位数，减少异常值对scale factor的影响，从而找到一个合适的scale factor。</p>
+<p>我们要想单独运行这一步，可以使用函数estimateSizeFactors()，示例如下：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">dds &lt;- DESeqDataSetFromTximport(txi, colData = meta, design = ~ sampletype)</span><br><span class="line">## 计算sizefactors</span><br><span class="line">dds.sizefactor &lt;- estimateSizeFactors(dds)</span><br><span class="line">## 如果想要知道具体的sizefactor是多少，可以使用sizeFactors()函数</span><br><span class="line">sizeFactors(dds.sizefactor )</span><br></pre></td></tr></table></figure>
+
+<p>sizeFactors()函数除了可以查看表达矩阵评估得到的具体的sizefactor，还可以给一个DESeqDataSet对象的sizefactor赋值，这样DESeq2在对DESeqDataSet对象进行差异表达分析时，就可以使用这个赋值的sizefactor进行后续分析。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">dds &lt;- DESeqDataSetFromTximport(txi, colData = meta, design = ~ sampletype)</span><br><span class="line"># WT和KO两种处理，六个样本的sizefactor分别是2，2，2，8，9，10</span><br><span class="line">sizefactor &lt;- c(2,2,2,8,9,10)</span><br><span class="line">names(sizefactor) &lt;- c(&#x27;WT_1&#x27;,&#x27;WT_2&#x27;,&#x27;WT_3&#x27;,&#x27;KO_1&#x27;,&#x27;KO_2&#x27;,&#x27;KO_3&#x27;)</span><br><span class="line">sizeFactors(dds) &lt;- sizefactor</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>所以，如果你的样本加有spike-in，你通过各种方式最终得到了一个scale factor，也可以通过这种方式赋给你的基因表达数据集</p>
+</blockquote>
+<h2 id="2-Estimate-gene-wise-dispersion"><a href="#2-Estimate-gene-wise-dispersion" class="headerlink" title="2. Estimate gene-wise dispersion"></a>2. Estimate gene-wise dispersion</h2><p>差异表达分析的第二步是对数据离散程度的评估，在RNA-seq的reads count数据中，我们需要知道两点：</p>
+<ul>
+<li>为了确定差异表达的基因，我们需要根据组内(重复之间)的方差来确定基因的表达值在组间是否有显著差异</li>
+<li>组内(重复之间)的变异需要考虑到方差随表达量的平均值增加的情况，如下图所示(每个黑点是一个基因)。<div align="center"><img src="https://upload-images.jianshu.io/upload_images/6415244-6022d938c9dfd9a6.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1200/format/webp" alt="avatar"></div></li>
+</ul>
+<p>为了更加准确的确定差异表达基因，DESeq2需要解释方差和均值的关系。从上图可知，在低表达的基因中，它们的方差也更低，因此DESeq2不希望差异表达基因都是低表达基因。</p>
+<p>DESeq2使用离散度(dispersion)作为方差的度量方式，离散度既可以解释基因表达值的方差也可以解释基因的平均表达值。其具体公式为：<code>Var = μ + α*μ^2</code>。其中Var表示方差，μ表示均值，α表示离散度。因此我们可以得到这么一个关系:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>离散度</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>方差增加</td>
+<td>离散度增加</td>
+</tr>
+<tr>
+<td>平均值增加</td>
+<td>离散度降低</td>
+</tr>
+</tbody></table>
+<p>那么在表达水平较高的基因中，离散度的平方根$$\sqrt{\alpha}$$就等于方差系数$$\frac{\sigma}{\mu}$$。其中σ是标准差，μ是平均值。那么α&#x3D;0.01就意味着，在样本生物重复之间存在着10%的标准差(μ&#x3D;1?)。</p>
+<blockquote>
+<p>表达水平较高时，μ对于公式的影响显著小于μ^2</p>
+</blockquote>
+<p>因此，<strong>具有相同平均值的基因的离散度仅根据其方差而存在差异，离散度反映了一个给定平均值的基因表达的差异程度</strong>。</p>
+<p>那么接下来一个比较重要的问题，就是如何将离散度与我们的模型建立联系呢？为了更精确的为我们的数据建模，我们需要知道每个组内方差的精确评估值。</p>
+<p>但是，生物这个行当，一般3个重复就了不起了，6个重复就顶破天了。看起来似乎挺多的，但是远远不够，这就导致我们得到的组内方差是相当的不可靠……</p>
+<blockquote>
+<p>6个重复都不一定够，所以那些做RNA-seq一个处理只有一个重复的同学，你们是想搞事情么？</p>
+</blockquote>
+<p>针对这个问题，DESeq2使用一种叫作<code>shrinkage</code>的方法，共享基因之间的表达信息，根据基因的表达水平生成更为准确的方差估计。<strong>DESeq2假设具有相似表达水平的基因也具有相似的方差</strong>。这样DESeq2就可以基于基因的平均表达水平和离散度来评估每个基因的离散度。</p>
+<blockquote>
+<p>在下文里我就暂且把<code>shrinkage</code>翻译为收缩</p>
+</blockquote>
+<h2 id="3-Fit-curve-to-gene-wise-dispersion-estimates"><a href="#3-Fit-curve-to-gene-wise-dispersion-estimates" class="headerlink" title="3. Fit curve to gene-wise dispersion estimates"></a>3. Fit curve to gene-wise dispersion estimates</h2><p>DESeq2的第三步就是根据基因的离散度拟合一个曲线。那么为什么要做拟合呢？不同的基因生物学重复中存在不同的方差，但是，在所有的基因中，将会有一个合理的离散分布。</p>
+<p>这个曲线如下图红线所示，其中红线的横坐标是基因的表达强度，纵坐标是理论离散值。而每一个黑点的横坐标是基因的平均表达水平，纵坐标是经过最大似然估计的离散值。<div align="center"><img src="https://upload-images.jianshu.io/upload_images/6415244-752512d1028a4009.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/850/format/webp" alt="avatar"></div></p>
+<h2 id="4-Shrink-gene-wise-dispersion-estimates-toward-the-values-predicted-by-the-curve"><a href="#4-Shrink-gene-wise-dispersion-estimates-toward-the-values-predicted-by-the-curve" class="headerlink" title="4. Shrink gene-wise dispersion estimates toward the values predicted by the curve"></a>4. Shrink gene-wise dispersion estimates toward the values predicted by the curve</h2><p>有了拟合曲线，接下来就是对基因表达水平的离散度进行矫正，即：**将基因的实际离散度向红线收缩(shrink)**。当样本量较小时，该曲线可以让我们更为准确的识别差异表达基因。既然知道要将基因的离散度向红色曲线收缩，那么收缩多少比较合适呢？有两点需要考虑：</p>
+<ul>
+<li>基因的离散度距离红色曲线的距离</li>
+<li>样本量（样本量越大，则收缩的越少）</li>
+</ul>
+<p>这种方法在差异表达分析时，可以极大的减少数据的假阳性。离散度较低的基因朝着理论值收缩，从而得到一个更为准确的离散值。<strong>而那些离散度较高的基因，则不能无脑朝着理论值收缩</strong>。</p>
+<p>这是因为这类基因可能不遵循建模假设，并且由于生物学或技术原因使得这类基因与其他基因具有更高的方差。DESeq2识别这类基因后，将不采用shrink方法对它们进行处理。下图中蓝色圆圈圈住的便是这类基因。<div align="center"><img src="https://upload-images.jianshu.io/upload_images/6415244-65408f30140e4690.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1200/format/webp" alt="avatar"></div></p>
+<h2 id="5-GLM-fit-for-each-gene"><a href="#5-GLM-fit-for-each-gene" class="headerlink" title="5. GLM fit for each gene"></a>5. GLM fit for each gene</h2><p>DESeq2的第五步，对每个基因使用广义线性模型进行拟合，我自己也没搞明白，就不在这里献丑了</p>
+<p>写在后面的话<br>也许你会问既然DESeq()函数可以一键实现这么多操作，为什么还要一步一步单拎出来做呢？主要是我自己有点强迫症，知其然不知其所以然的感觉太痛苦了……更何况，有了spike-in的教训，我还敢无脑运行软件么？</p>
+<hr>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/DESeq2/" rel="tag"># DESeq2</a>
+              <a href="/tags/RNAseq/" rel="tag"># RNAseq</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/%E7%94%9F%E7%89%A9%E7%BB%9F%E8%AE%A1%E5%AD%A6/RNAseq%E4%B8%8E%E8%B4%9F%E4%BA%8C%E9%A1%B9%E5%88%86%E5%B8%83/" rel="prev" title="RNAseq与负二项分布">
+      <i class="fa fa-chevron-left"></i> RNAseq与负二项分布
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#DESeq2%E7%9A%84%E5%B7%AE%E5%BC%82%E8%A1%A8%E8%BE%BE%E5%88%86%E6%9E%90%E6%AD%A5%E9%AA%A4"><span class="nav-number">1.</span> <span class="nav-text">DESeq2的差异表达分析步骤</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#1-estimating-size-factors"><span class="nav-number">1.1.</span> <span class="nav-text">1. estimating size factors</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2-Estimate-gene-wise-dispersion"><span class="nav-number">1.2.</span> <span class="nav-text">2. Estimate gene-wise dispersion</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#3-Fit-curve-to-gene-wise-dispersion-estimates"><span class="nav-number">1.3.</span> <span class="nav-text">3. Fit curve to gene-wise dispersion estimates</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#4-Shrink-gene-wise-dispersion-estimates-toward-the-values-predicted-by-the-curve"><span class="nav-number">1.4.</span> <span class="nav-text">4. Shrink gene-wise dispersion estimates toward the values predicted by the curve</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#5-GLM-fit-for-each-gene"><span class="nav-number">1.5.</span> <span class="nav-text">5. GLM fit for each gene</span></a></li></ol></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">张永超</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">8</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">categories</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/fentouxungui" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;fentouxungui" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="/zhangyongchao@nibs.ac.cn" title="E-Mail → zhangyongchao@nibs.ac.cn"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+
+  <div class="links-of-blogroll motion-element">
+    <div class="links-of-blogroll-title"><i class="fa fa-link fa-fw"></i>
+      Links
+    </div>
+    <ul class="links-of-blogroll-list">
+        <li class="links-of-blogroll-item">
+          <a href="http://www.daokedao.site/" title="http:&#x2F;&#x2F;www.daokedao.site&#x2F;" rel="noopener" target="_blank">Xi Lab</a>
+        </li>
+        <li class="links-of-blogroll-item">
+          <a href="http://www.nibs.ac.cn/" title="http:&#x2F;&#x2F;www.nibs.ac.cn&#x2F;" rel="noopener" target="_blank">NIBS</a>
+        </li>
+    </ul>
+  </div>
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">张永超</span>
+</div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+  
+
+</body>
+</html>
